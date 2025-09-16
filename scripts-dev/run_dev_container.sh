@@ -1,0 +1,1 @@
+docker run -it -d --name sglang --shm-size 32g --ipc=host --cap-add=SYS_PTRACE --network=host --device=/dev/kfd --device=/dev/dri --security-opt seccomp=unconfined -v /mnt/raid/:/data -v /home/rpujarna/Work:/Work --group-add video --privileged -w /workspace lmsysorg/sglang:v0.4.9.post1-rocm630
