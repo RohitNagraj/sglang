@@ -15,7 +15,9 @@ fi
 docker exec ci_sglang pip install --upgrade pip
 docker exec ci_sglang pip uninstall sgl-kernel -y || true
 # docker exec -w /sglang-checkout/sgl-kernel ci_sglang bash -c "rm -f pyproject.toml && mv pyproject_rocm.toml pyproject.toml && python3 setup_rocm.py install"
+echo "Installing sgl-kernel-rpujarna-test"
 pip install -i https://test.pypi.org/simple/ sgl-kernel-rpujarna-test
+echo "Successfully installed sgl-kernel-rpujarna-test"
 
 case "${GPU_ARCH}" in
   mi35x)
