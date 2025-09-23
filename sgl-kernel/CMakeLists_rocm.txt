@@ -96,7 +96,6 @@ set(PLAT_LIB_DIR "/usr/lib/x86_64-linux-gnu")
 link_directories(${PLAT_LIB_DIR})
 
 # Sources
-
 set(SOURCES
 ${PROJ_ROOT}/csrc/moe/moe_align_kernel.hip
 ${PROJ_ROOT}/csrc/moe/moe_topk_softmax_kernels.hip
