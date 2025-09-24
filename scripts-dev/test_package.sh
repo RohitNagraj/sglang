@@ -37,5 +37,3 @@ uv pip install /home/rpujarna/Work/dev/sglang/sgl-kernel/dist/sgl_kernel-0.3.10-
 uv pip install numpy
 uv pip install torch --index-url https://download.pytorch.org/whl/rocm6.4
 deactivate
-
-
