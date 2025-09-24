@@ -53,7 +53,7 @@ else()
       "import sys, torch;
 try:
   n=torch.cuda.device_count();
-  print(torch.cuda.get_device_properties(0).gcnArchName.split(':')[0] if n else '') 
+  print(torch.cuda.get_device_properties(0).gcnArchName.split(':')[0] if n else '')
 except Exception:
   print('')"
     OUTPUT_VARIABLE DETECTED_ARCH
