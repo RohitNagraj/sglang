@@ -1,7 +1,7 @@
 #!/bin/bash
 set -ex
 
-DOCKER_IMAGE=lmsysorg/sglang:v0.5.3rc0-rocm630-mi30x
+DOCKER_IMAGE=rocm/pytorch
 
 docker run --rm \
    -v $(pwd):/sgl-kernel \
@@ -21,10 +21,10 @@ docker run --rm \
    which cmake
    cmake --version
 
-   /usr/local/bin/pip install --no-cache-dir ninja setuptools==75.0.0 wheel==0.41.0 numpy uv scikit-build-core && \
+   /opt/venv/bin/pip install --no-cache-dir ninja setuptools==75.0.0 wheel==0.41.0 numpy uv scikit-build-core && \
 
    cd /sgl-kernel && \
-   /usr/bin/python rocm_hipify.py && \
-   /usr/bin/python -m uv build --wheel -Cbuild-dir=build . --color=always --no-build-isolation && \
+   /opt/venv/bin/python rocm_hipify.py && \
+   /opt/venv/bin/python -m uv build --wheel -Cbuild-dir=build . --color=always --no-build-isolation && \
    ./rename_wheels_rocm.sh
 "
