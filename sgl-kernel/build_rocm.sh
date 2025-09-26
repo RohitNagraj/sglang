@@ -122,11 +122,13 @@ docker pull "${IMAGE}"
 docker run --rm \
    -v $(pwd):/sgl-kernel \
    ${IMAGE} \
+
    bash -c "
    # Install CMake (version >= 3.26) - Robust Installation
    export CMAKE_VERSION_MAJOR=3.31
    export CMAKE_VERSION_MINOR=1
    echo \"Downloading CMake from: https://cmake.org/files/v\${CMAKE_VERSION_MAJOR}/cmake-\${CMAKE_VERSION_MAJOR}.\${CMAKE_VERSION_MINOR}-linux-x86_64.tar.gz\"
+
    wget https://cmake.org/files/v\${CMAKE_VERSION_MAJOR}/cmake-\${CMAKE_VERSION_MAJOR}.\${CMAKE_VERSION_MINOR}-linux-x86_64.tar.gz
    tar -xzf cmake-\${CMAKE_VERSION_MAJOR}.\${CMAKE_VERSION_MINOR}-linux-x86_64.tar.gz
    mv cmake-\${CMAKE_VERSION_MAJOR}.\${CMAKE_VERSION_MINOR}-linux-x86_64 /opt/cmake
@@ -142,5 +144,6 @@ docker run --rm \
    cd /sgl-kernel && \
    /usr/bin/python rocm_hipify.py && \
    /usr/bin/python -m uv build --wheel -Cbuild-dir=build . --color=always --no-build-isolation && \
+
    ./rename_wheels_rocm.sh
 "
