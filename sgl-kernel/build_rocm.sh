@@ -1,5 +1,13 @@
 #!/bin/bash
 set -euo pipefail
+ROCM_VERSION=$1
+
+if [ "$ROCM_VERSION" = "700" ]; then
+  PYTHON_ROOT_PATH="/opt/venv/bin"
+else
+  PYTHON_ROOT_PATH="/usr/bin"
+fi
+echo "Python root path is: $PYTHON_ROOT_PATH"
 
 # Get version from SGLang version.py file
 SGLANG_VERSION_FILE="$(dirname "$0")/../python/sglang/version.py"
@@ -27,26 +35,10 @@ fi
 
 
 # Default base tags (can be overridden by command line arguments)
-DEFAULT_MI30X_BASE_TAG="${SGLANG_VERSION}-rocm630-mi30x"
-DEFAULT_MI35X_BASE_TAG="${SGLANG_VERSION}-rocm700-mi35x"
+DEFAULT_MI30X_BASE_TAG="${SGLANG_VERSION}-rocm${ROCM_VERSION}-mi30x"
 
 # Parse command line arguments
 MI30X_BASE_TAG="${DEFAULT_MI30X_BASE_TAG}"
-MI35X_BASE_TAG="${DEFAULT_MI35X_BASE_TAG}"
-
-while [[ $# -gt 0 ]]; do
-  case $1 in
-    --mi30x-base-tag) MI30X_BASE_TAG="$2"; shift 2;;
-    --mi35x-base-tag) MI35X_BASE_TAG="$2"; shift 2;;
-    -h|--help)
-      echo "Usage: $0 [--mi30x-base-tag TAG] [--mi35x-base-tag TAG]"
-      exit 0
-      ;;
-    *) echo "Unknown option $1"; exit 1;;
-  esac
-done
-
-
 
 # Detect GPU architecture from the Kubernetes runner hostname
 HOSTNAME_VALUE=$(hostname)
@@ -62,9 +54,6 @@ fi
 
 # Normalise / collapse architectures we don’t yet build specifically for
 case "${GPU_ARCH}" in
-  mi35x)
-    echo "Runner uses ${GPU_ARCH}; will fetch mi35x image."
-    ;;
   mi30x|mi300|mi325)
     echo "Runner uses ${GPU_ARCH}; will fetch mi30x image."
     GPU_ARCH="mi30x"
@@ -86,12 +75,11 @@ fi
 
 # Find the latest image
 find_latest_image() {
-  local gpu_arch=$1
+  local gpu_arch="${GPU_ARCH}"
   local base_tag days_back image_tag
 
   case "${gpu_arch}" in
       mi30x) base_tag="${MI30X_BASE_TAG}" ;;
-      mi35x) base_tag="${MI35X_BASE_TAG}" ;;
       *)     echo "Error: unsupported GPU architecture '${gpu_arch}'" >&2; return 1 ;;
   esac
 
@@ -107,11 +95,7 @@ find_latest_image() {
 
   echo "Error: no ${gpu_arch} image found in the last 7 days for base ${base_tag}" >&2
   echo "Using hard-coded fallback…" >&2
-  if [[ "${gpu_arch}" == "mi35x" ]]; then
-    echo "rocm/sgl-dev:v0.5.0rc0-rocm700-mi35x-20250812"
-  else
-    echo "rocm/sgl-dev:v0.5.0rc0-rocm630-mi30x-20250812"
-  fi
+  echo "rocm/sgl-dev:v0.5.0rc0-rocm${ROCM_VERSION}-mi30x-20250812"
 }
 
 # Pull and run the latest image
@@ -120,30 +104,32 @@ echo "Pulling Docker image: ${IMAGE}"
 docker pull "${IMAGE}"
 
 docker run --rm \
-   -v $(pwd):/sgl-kernel \
-   ${IMAGE} \
+    -v $(pwd):/sgl-kernel \
+    ${IMAGE} \
+    bash -c "
+    # Install CMake (version >= 3.26) - Robust Installation
+    cd /
+    export CMAKE_VERSION_MAJOR=3.31
+    export CMAKE_VERSION_MINOR=1
+    ls
+    echo \"Downloading CMake from: https://cmake.org/files/v\${CMAKE_VERSION_MAJOR}/cmake-\${CMAKE_VERSION_MAJOR}.\${CMAKE_VERSION_MINOR}-linux-x86_64.tar.gz\"
 
-   bash -c "
-   # Install CMake (version >= 3.26) - Robust Installation
-   export CMAKE_VERSION_MAJOR=3.31
-   export CMAKE_VERSION_MINOR=1
-   echo \"Downloading CMake from: https://cmake.org/files/v\${CMAKE_VERSION_MAJOR}/cmake-\${CMAKE_VERSION_MAJOR}.\${CMAKE_VERSION_MINOR}-linux-x86_64.tar.gz\"
+    wget https://cmake.org/files/v\${CMAKE_VERSION_MAJOR}/cmake-\${CMAKE_VERSION_MAJOR}.\${CMAKE_VERSION_MINOR}-linux-x86_64.tar.gz
+    tar -xzf cmake-\${CMAKE_VERSION_MAJOR}.\${CMAKE_VERSION_MINOR}-linux-x86_64.tar.gz
+    mv cmake-\${CMAKE_VERSION_MAJOR}.\${CMAKE_VERSION_MINOR}-linux-x86_64 /opt/cmake
+    export PATH=/opt/cmake/bin:\$PATH
 
-   wget https://cmake.org/files/v\${CMAKE_VERSION_MAJOR}/cmake-\${CMAKE_VERSION_MAJOR}.\${CMAKE_VERSION_MINOR}-linux-x86_64.tar.gz
-   tar -xzf cmake-\${CMAKE_VERSION_MAJOR}.\${CMAKE_VERSION_MINOR}-linux-x86_64.tar.gz
-   mv cmake-\${CMAKE_VERSION_MAJOR}.\${CMAKE_VERSION_MINOR}-linux-x86_64 /opt/cmake
-   export PATH=/opt/cmake/bin:\$PATH
+    # Debugging CMake
+    echo \"PATH: \$PATH\"
+    which cmake
+    cmake --version
 
-   # Debugging CMake
-   echo \"PATH: \$PATH\"
-   which cmake
-   cmake --version
+    ${PYTHON_ROOT_PATH}/pip install --no-cache-dir ninja setuptools==75.0.0 wheel==0.41.0 numpy uv scikit-build-core && \
 
-   /usr/bin/pip install --no-cache-dir ninja setuptools==75.0.0 wheel==0.41.0 numpy uv scikit-build-core && \
+    cd /sgl-kernel && \
+    rm -rf CMakeLists.txt && mv CMakeLists_rocm.txt CMakeLists.txt && \
+    ${PYTHON_ROOT_PATH}/python rocm_hipify.py && \
+    ${PYTHON_ROOT_PATH}/python -m uv build --wheel -Cbuild-dir=build . --color=always --no-build-isolation && \
 
-   cd /sgl-kernel && \
-   /usr/bin/python rocm_hipify.py && \
-   /usr/bin/python -m uv build --wheel -Cbuild-dir=build . --color=always --no-build-isolation && \
-
-   ./rename_wheels_rocm.sh
+    ./rename_wheels_rocm.sh
 "
