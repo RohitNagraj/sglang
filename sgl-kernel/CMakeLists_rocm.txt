@@ -112,6 +112,7 @@ set(SGL_HIP_FLAGS
   -DENABLE_FP8
   ${SGL_FP8_MACROS}
   -Wno-pass-failed
+  -Wundefined-internal
 )
 
 # Python extension
