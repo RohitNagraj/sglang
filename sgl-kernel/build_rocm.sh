@@ -9,6 +9,12 @@ else
 fi
 echo "Python root path is: $PYTHON_ROOT_PATH"
 
+if [ "$ROCM_VERSION" = "700" ]; then
+  AMDGPU_TARGET="gfx942;gfx950"
+else
+  AMDGPU_TARGET="gfx942"
+fi
+
 # Get version from SGLang version.py file
 SGLANG_VERSION_FILE="$(dirname "$0")/../python/sglang/version.py"
 SGLANG_VERSION="v0.5.0rc0"   # Default version, will be overridden if version.py is found
@@ -36,9 +42,11 @@ fi
 
 # Default base tags (can be overridden by command line arguments)
 DEFAULT_MI30X_BASE_TAG="${SGLANG_VERSION}-rocm${ROCM_VERSION}-mi30x"
+DEFAULT_MI35X_BASE_TAG="${SGLANG_VERSION}-rocm700-mi35x"
 
 # Parse command line arguments
 MI30X_BASE_TAG="${DEFAULT_MI30X_BASE_TAG}"
+MI35X_BASE_TAG="${DEFAULT_MI35X_BASE_TAG}"
 
 # Detect GPU architecture from the Kubernetes runner hostname
 HOSTNAME_VALUE=$(hostname)
@@ -52,8 +60,11 @@ else
   echo "Warning: could not parse GPU architecture from '${HOSTNAME_VALUE}', defaulting to ${GPU_ARCH}"
 fi
 
-# Normalise / collapse architectures we don’t yet build specifically for
+# Normalise / collapse architectures we don't yet build specifically for
 case "${GPU_ARCH}" in
+  mi35x)
+    echo "Runner uses ${GPU_ARCH}; will fetch mi35x image."
+    ;;
   mi30x|mi300|mi325)
     echo "Runner uses ${GPU_ARCH}; will fetch mi30x image."
     GPU_ARCH="mi30x"
@@ -75,11 +86,12 @@ fi
 
 # Find the latest image
 find_latest_image() {
-  local gpu_arch="${GPU_ARCH}"
+  local gpu_arch=$1
   local base_tag days_back image_tag
 
   case "${gpu_arch}" in
       mi30x) base_tag="${MI30X_BASE_TAG}" ;;
+      mi35x) base_tag="${MI35X_BASE_TAG}" ;;
       *)     echo "Error: unsupported GPU architecture '${gpu_arch}'" >&2; return 1 ;;
   esac
 
@@ -95,7 +107,11 @@ find_latest_image() {
 
   echo "Error: no ${gpu_arch} image found in the last 7 days for base ${base_tag}" >&2
   echo "Using hard-coded fallback…" >&2
-  echo "rocm/sgl-dev:v0.5.0rc0-rocm${ROCM_VERSION}-mi30x-20250812"
+  if [[ "${gpu_arch}" == "mi35x" ]]; then
+    echo "rocm/sgl-dev:v0.5.0rc0-rocm700-mi35x-20250812"
+  else
+    echo "rocm/sgl-dev:v0.5.0rc0-rocm630-mi30x-20250812"
+  fi
 }
 
 # Pull and run the latest image
@@ -105,6 +121,7 @@ docker pull "${IMAGE}"
 
 docker run --rm \
     -v $(pwd):/sgl-kernel \
+    -e AMDGPU_TARGET="${AMDGPU_TARGET}" \
     ${IMAGE} \
     bash -c "
     # Install CMake (version >= 3.26) - Robust Installation
@@ -123,6 +140,9 @@ docker run --rm \
     echo \"PATH: \$PATH\"
     which cmake
     cmake --version
+    
+    # Display AMDGPU_TARGET
+    echo \"AMDGPU_TARGET: \${AMDGPU_TARGET}\"
 
     ${PYTHON_ROOT_PATH}/pip install --no-cache-dir ninja setuptools==75.0.0 wheel==0.41.0 numpy uv scikit-build-core && \
 

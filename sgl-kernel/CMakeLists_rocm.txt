@@ -38,18 +38,17 @@ endif()
 enable_language(HIP)
 find_package(hip REQUIRED CONFIG)
 
-# Determine AMDGPU target:
-# Option 1: Build for multiple architectures (recommended for distribution)
-# Option 2: Build for single architecture (faster compilation)
+# Determine AMDGPU target from environment variable or default to gfx942
 set(AMDGPU_TARGET_ENV "$ENV{AMDGPU_TARGET}")
 
 if(AMDGPU_TARGET_ENV)
   # Use environment variable if specified
   set(AMDGPU_TARGETS "${AMDGPU_TARGET_ENV}")
+  message(STATUS "Using AMDGPU_TARGET from environment: ${AMDGPU_TARGETS}")
 else()
-  # Default to building for both MI300X and MI350X
-  set(AMDGPU_TARGETS "gfx942;gfx950")
-  message(STATUS "Building for multiple architectures: ${AMDGPU_TARGETS}")
+  # Default to gfx942 only
+  set(AMDGPU_TARGETS "gfx942")
+  message(STATUS "AMDGPU_TARGET not set, defaulting to gfx942")
 endif()
 
 # Set HIP architectures
