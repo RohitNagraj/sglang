@@ -363,49 +363,19 @@ __device__ __forceinline__ dstDtype castFromFloat(float val) {
 using FP8_TYPE = c10::Float8_e4m3fn;
 C10_HOST_DEVICE constexpr auto FP8_E4M3_MAX = std::numeric_limits<FP8_TYPE>::max();
 #else  // USE_ROCM
-
-// For multi-arch builds, select FP8 type based on target architecture
-// During device compilation (__HIP_DEVICE_COMPILE__), use arch-specific types
-// During host compilation, default to FNUZ (gfx942) for type definitions
-#if defined(__HIP_DEVICE_COMPILE__)
-  // Device code: select based on actual target architecture
-  #if defined(__gfx950__)
-    // gfx950 (MI350X) uses standard E4M3
-    #if HIP_FP8_TYPE_E4M3
-      #include <c10/util/Float8_e4m3fn.h>
-      using FP8_TYPE = c10::Float8_e4m3fn;
-      C10_HOST_DEVICE constexpr auto FP8_E4M3_MAX = std::numeric_limits<FP8_TYPE>::max();
-    #else
-      #error "HIP_FP8_TYPE_E4M3 must be defined for gfx950"
-    #endif
-  #elif defined(__gfx942__)
-    // gfx942 (MI300X) uses FNUZ format
-    #if HIP_FP8_TYPE_FNUZ
-      #include <c10/util/Float8_e4m3fnuz.h>
-      using FP8_TYPE = c10::Float8_e4m3fnuz;
-      constexpr auto FP8_E4M3_MAX = 224.0f;
-    #else
-      #error "HIP_FP8_TYPE_FNUZ must be defined for gfx942"
-    #endif
-  #else
-    #error "fp8 is not supported in this processor. Only gfx942 (MI300X) and gfx950 (MI350X) are supported."
-  #endif
+#if HIP_FP8_TYPE_FNUZ
+#include <c10/util/Float8_e4m3fnuz.h>
+using FP8_TYPE = c10::Float8_e4m3fnuz;
+constexpr auto FP8_E4M3_MAX = 224.0f;
 #else
-  // Host code: use a default type for compilation
-  // The actual device code will use the correct type based on architecture
-  #if HIP_FP8_TYPE_FNUZ
-    #include <c10/util/Float8_e4m3fnuz.h>
-    using FP8_TYPE = c10::Float8_e4m3fnuz;
-    constexpr auto FP8_E4M3_MAX = 224.0f;
-  #elif HIP_FP8_TYPE_E4M3
-    #include <c10/util/Float8_e4m3fn.h>
-    using FP8_TYPE = c10::Float8_e4m3fn;
-    C10_HOST_DEVICE constexpr auto FP8_E4M3_MAX = std::numeric_limits<FP8_TYPE>::max();
-  #else
-    #error "Either HIP_FP8_TYPE_FNUZ or HIP_FP8_TYPE_E4M3 must be defined"
-  #endif
-#endif  // __HIP_DEVICE_COMPILE__
-
+#if HIP_FP8_TYPE_E4M3
+#include <c10/util/Float8_e4m3fn.h>
+using FP8_TYPE = c10::Float8_e4m3fn;
+C10_HOST_DEVICE constexpr auto FP8_E4M3_MAX = std::numeric_limits<FP8_TYPE>::max();
+#else
+#error "fp8 is not supported in this processor (arch < gfx942)."
+#endif  // HIP_FP8_TYPE_E4M3
+#endif  // HIP_FP8_TYPE_FNUZ
 #endif  // USE_ROCM
 
 #define FULL_MASK 0xffffffff
