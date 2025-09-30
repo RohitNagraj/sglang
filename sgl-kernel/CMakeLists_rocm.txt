@@ -58,7 +58,7 @@ set(CMAKE_HIP_ARCHITECTURES ${AMDGPU_TARGETS})
 # FP8 macro selection
 # Always define HIP_FP8_TYPE_FNUZ=1 (for gfx942 and host compilation)
 # Additionally define HIP_FP8_TYPE_E4M3=1 when building for gfx950
-# The existing utils_hip.h logic will pick the right one based on architecture
+# The existing utils.h logic will pick the right one based on architecture
 set(SGL_FP8_MACROS "-DHIP_FP8_TYPE_FNUZ=1")
 
 if(AMDGPU_TARGETS MATCHES "gfx950")
