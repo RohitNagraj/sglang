@@ -5,6 +5,7 @@ import hashlib
 import pathlib
 import re
 
+
 def update_wheel_index(cuda_version="118", rocm_version=None):
     if rocm_version is None:
         index_dir = pathlib.Path(f"sgl-whl/cu{cuda_version}/sgl-kernel")

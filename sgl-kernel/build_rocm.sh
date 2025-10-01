@@ -140,7 +140,7 @@ docker run --rm \
     echo \"PATH: \$PATH\"
     which cmake
     cmake --version
-    
+
     # Display AMDGPU_TARGET
     echo \"AMDGPU_TARGET: \${AMDGPU_TARGET}\"
 
