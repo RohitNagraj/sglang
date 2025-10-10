@@ -524,9 +524,7 @@ class HiCacheHF3FS(HiCacheStorage):
         flat = not self.is_zero_copy
         values = (
             [
-                self.mem_pool_host.get_data_page(
-                    host_indices[i * self.mem_pool_host.page_size], flat=flat
-                )
+                self.mem_pool_host.get_data_page(host_indices[i * page_num], flat=flat)
                 for i in range(page_num)
             ]
             if self.is_zero_copy
@@ -576,9 +574,7 @@ class HiCacheHF3FS(HiCacheStorage):
         # host_indices to kv_buffer
         flat = not self.is_zero_copy
         values = [
-            self.mem_pool_host.get_data_page(
-                host_indices[i * self.mem_pool_host.page_size], flat=flat
-            )
+            self.mem_pool_host.get_data_page(host_indices[i * page_num], flat=flat)
             for i in range(page_num)
         ]
 

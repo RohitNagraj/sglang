@@ -1,17 +1,10 @@
 import itertools
 import math
-import os
 
 import torch
 import triton
 import triton.language as tl
 from sgl_kernel import lightning_attention_decode
-
-# CI environment detection
-IS_CI = (
-    os.getenv("CI", "false").lower() == "true"
-    or os.getenv("GITHUB_ACTIONS", "false").lower() == "true"
-)
 
 
 def next_power_of_2(n):
@@ -214,12 +207,7 @@ def calculate_diff(batch_size):
         print("❌ Implementations differ")
 
 
-# Simplified for CI environment
-if IS_CI:
-    batch_size_range = [1]  # Single batch size for CI
-else:
-    batch_size_range = [i for i in range(1, 65)]  # 1 to 64
-
+batch_size_range = [i for i in range(1, 65)]  # 1 to 128
 configs = [(bs,) for bs in batch_size_range]
 
 
@@ -304,9 +292,8 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    # Run correctness test - simplified for CI
-    test_batch_size = 1 if IS_CI else 4
-    calculate_diff(batch_size=test_batch_size)
+    # Run correctness test
+    calculate_diff(batch_size=4)
 
     # Run performance benchmark
     benchmark.run(print_data=True)

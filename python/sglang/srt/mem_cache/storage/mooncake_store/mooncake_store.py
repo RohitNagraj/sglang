@@ -190,10 +190,9 @@ class MooncakeStore(HiCacheStorage):
 
     def register_mem_pool_host(self, mem_pool_host: HostKVCache):
         super().register_mem_pool_host(mem_pool_host)
-        assert self.mem_pool_host.layout in [
-            "page_first",
-            "page_first_direct",
-        ], "mooncake store storage backend only support page first or page first direct layout"
+        assert (
+            self.mem_pool_host.layout == "page_first"
+        ), "mooncake store storage backend only support page first layout"
         buffer = self.mem_pool_host.kv_buffer
         try:
             buffer_ptr = buffer.data_ptr()
@@ -276,10 +275,10 @@ class MooncakeStore(HiCacheStorage):
         set_buffer_ptrs = []
         set_buffer_sizes = []
         set_indices = []
-        set_results = [-1] * len(key_strs)
-        for i in range(len(key_strs)):
+        set_results = [-1] * len(keys)
+        for i in range(len(keys)):
             if exist_result[i] != 1:
-                set_keys.append(key_strs[i])
+                set_keys.append(keys[i])
                 set_buffer_ptrs.append(buffer_ptrs[i])
                 set_buffer_sizes.append(buffer_sizes[i])
                 set_indices.append(i)
@@ -289,7 +288,7 @@ class MooncakeStore(HiCacheStorage):
         # Only set non-existing keys to storage
         if len(set_keys) > 0:
             put_results = self._put_batch_zero_copy_impl(
-                set_keys, set_buffer_ptrs, set_buffer_sizes
+                key_strs, buffer_ptrs, buffer_sizes
             )
             for i in range(len(set_indices)):
                 set_results[set_indices[i]] = put_results[i]

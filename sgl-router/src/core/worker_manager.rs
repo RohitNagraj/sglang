@@ -953,105 +953,113 @@ impl WorkerManager {
             return Ok(());
         }
 
-        // Mark all workers as unhealthy initially
         info!(
-            "Marking {} workers as unhealthy before health checks",
+            "Marking {} workers as unhealthy before initial health checks",
             workers.len()
         );
         for worker in &workers {
             worker.set_healthy(false);
         }
 
+        info!(
+            "Performing initial health checks for {} workers",
+            workers.len()
+        );
+        let health_check_futures: Vec<_> = workers
+            .iter()
+            .map(|worker| {
+                let w = worker.clone();
+                let url = worker.url().to_string();
+                async move {
+                    match w.check_health_async().await {
+                        Ok(_) => {
+                            w.set_healthy(true);
+                            debug!(
+                                "Worker {} passed initial health check and marked healthy",
+                                url
+                            );
+                            Ok(url)
+                        }
+                        Err(e) => {
+                            warn!("Worker {} failed initial health check: {}", url, e);
+                            Err(url)
+                        }
+                    }
+                }
+            })
+            .collect();
+
+        let health_results = future::join_all(health_check_futures).await;
+        let failed_checks: Vec<_> = health_results.into_iter().filter_map(|r| r.err()).collect();
+
+        if !failed_checks.is_empty() {
+            info!(
+                "Initial health check: {} workers failed: {:?}",
+                failed_checks.len(),
+                failed_checks
+            );
+        }
+
         loop {
-            // 1. Filter unhealthy workers
             let workers = registry.get_all();
+            let healthy_workers: Vec<_> = workers
+                .iter()
+                .filter(|w| w.is_healthy())
+                .map(|w| w.url().to_string())
+                .collect();
             let unhealthy_workers: Vec<_> = workers
                 .iter()
                 .filter(|w| !w.is_healthy())
-                .cloned()
+                .map(|w| w.url().to_string())
                 .collect();
 
-            // 2. If all workers are healthy, return immediately
             if unhealthy_workers.is_empty() {
-                let healthy_urls: Vec<_> = workers.iter().map(|w| w.url().to_string()).collect();
                 info!(
                     "All {} workers are healthy: {:?}",
                     workers.len(),
-                    healthy_urls
+                    healthy_workers
                 );
                 return Ok(());
             }
 
-            // Check timeout
             if start_time.elapsed() > timeout {
-                let healthy_workers: Vec<_> = workers
-                    .iter()
-                    .filter(|w| w.is_healthy())
-                    .map(|w| w.url().to_string())
-                    .collect();
-                let unhealthy_urls: Vec<_> = unhealthy_workers
-                    .iter()
-                    .map(|w| w.url().to_string())
-                    .collect();
-
                 error!(
                     "Workers failed to become healthy after {}s. Unhealthy: {:?}, Healthy: {:?}",
-                    timeout_secs, unhealthy_urls, healthy_workers
+                    timeout_secs, unhealthy_workers, healthy_workers
                 );
                 return Err(format!(
                     "Workers failed to become healthy after {}s. Unhealthy: {:?}",
-                    timeout_secs, unhealthy_urls
+                    timeout_secs, unhealthy_workers
                 ));
             }
-
-            let unhealthy_urls: Vec<_> = unhealthy_workers
-                .iter()
-                .map(|w| w.url().to_string())
-                .collect();
 
             info!(
                 "Waiting for {} workers to become healthy. Unhealthy: {:?}",
                 unhealthy_workers.len(),
-                unhealthy_urls
+                unhealthy_workers
             );
 
-            // 3. Check health of all unhealthy workers in parallel
-            let health_check_futures: Vec<_> = unhealthy_workers
+            let unhealthy_workers_to_check = workers
                 .iter()
-                .map(|worker| {
-                    let w = worker.clone();
-                    let url = worker.url().to_string();
-                    async move {
-                        match w.check_health_async().await {
-                            Ok(_) => {
-                                w.set_healthy(true);
-                                debug!("Worker {} now healthy", url);
-                            }
-                            Err(e) => {
-                                debug!("Worker {} health check failed: {}", url, e);
-                            }
+                .filter(|w| !w.is_healthy())
+                .cloned()
+                .collect::<Vec<_>>();
+
+            for worker in unhealthy_workers_to_check {
+                let url = worker.url().to_string();
+                match worker.check_health_async().await {
+                    Ok(_) => {
+                        if !worker.is_healthy() {
+                            worker.set_healthy(true);
+                            debug!("Worker {} now healthy after health check", url);
                         }
                     }
-                })
-                .collect();
-
-            future::join_all(health_check_futures).await;
-
-            // 4. Check if all workers are now healthy after health checks
-            let still_unhealthy: Vec<_> = workers.iter().filter(|w| !w.is_healthy()).collect();
-
-            // 5. If all workers are now healthy, return immediately without sleeping
-            if still_unhealthy.is_empty() {
-                let healthy_urls: Vec<_> = workers.iter().map(|w| w.url().to_string()).collect();
-                info!(
-                    "All {} workers are healthy: {:?}",
-                    workers.len(),
-                    healthy_urls
-                );
-                return Ok(());
+                    Err(e) => {
+                        debug!("Worker {} health check failed: {}", url, e);
+                    }
+                }
             }
 
-            // 6. Otherwise, sleep before next iteration
             tokio::time::sleep(check_interval).await;
         }
     }
@@ -1244,22 +1252,11 @@ impl WorkerManager {
             Ok(response) if response.status().is_success() => {
                 match response.json::<Value>().await {
                     Ok(json) => {
-                        // The /get_load endpoint returns an array of load info objects (one per DP rank)
-                        // Each object has: {dp_rank, num_reqs, num_waiting_reqs, num_tokens}
-                        if let Some(array) = json.as_array() {
-                            let total_tokens: i64 = array
-                                .iter()
-                                .filter_map(|entry| {
-                                    entry.get("num_tokens").and_then(|v| v.as_i64())
-                                })
-                                .sum();
-                            debug!("Worker {} load (total tokens): {}", url, total_tokens);
-                            Some(total_tokens as isize)
+                        if let Some(load) = json.get("load").and_then(|v| v.as_i64()) {
+                            debug!("Worker {} load: {}", url, load);
+                            Some(load as isize)
                         } else {
-                            warn!(
-                                "Invalid load response from {}: expected array, got {:?}",
-                                url, json
-                            );
+                            warn!("Invalid load response from {}: {:?}", url, json);
                             None
                         }
                     }
@@ -1488,6 +1485,7 @@ mod tests {
 
     #[test]
     fn test_parse_server_info_with_fallback() {
+        // Test with "model" instead of "model_id"
         let json = serde_json::json!({
             "model": "gpt-4",
             "dp_size": 2

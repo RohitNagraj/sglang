@@ -44,7 +44,6 @@ class MoeA2ABackend(Enum):
 class MoeRunnerBackend(Enum):
 
     AUTO = "auto"
-    DEEP_GEMM = "deep_gemm"
     TRITON = "triton"
     TRITON_KERNEL = "triton_kernel"
     FLASHINFER_TRTLLM = "flashinfer_trtllm"
@@ -54,9 +53,6 @@ class MoeRunnerBackend(Enum):
 
     def is_auto(self):
         return self == MoeRunnerBackend.AUTO
-
-    def is_deep_gemm(self):
-        return self == MoeRunnerBackend.DEEP_GEMM
 
     def is_triton(self):
         return self == MoeRunnerBackend.TRITON
@@ -112,7 +108,6 @@ MOE_A2A_BACKEND: Optional[MoeA2ABackend] = None
 MOE_RUNNER_BACKEND: Optional[MoeRunnerBackend] = None
 DEEPEP_MODE: Optional[DeepEPMode] = None
 IS_TBO_ENABLED: Optional[bool] = None
-IS_SBO_ENABLED: Optional[bool] = None
 TBO_TOKEN_DISTRIBUTION_THRESHOLD: Optional[float] = None
 DEEPEP_CONFIG: Optional[str] = None
 DISABLE_FLASHINFER_CUTLASS_MOE_FP4_ALLGATHER: Optional[bool] = None
@@ -124,7 +119,6 @@ def initialize_moe_config(server_args: ServerArgs):
     global DEEPEP_MODE
     global DEEPEP_CONFIG
     global IS_TBO_ENABLED
-    global IS_SBO_ENABLED
     global TBO_TOKEN_DISTRIBUTION_THRESHOLD
     global DISABLE_FLASHINFER_CUTLASS_MOE_FP4_ALLGATHER
 
@@ -133,7 +127,6 @@ def initialize_moe_config(server_args: ServerArgs):
     DEEPEP_MODE = DeepEPMode(server_args.deepep_mode)
     DEEPEP_CONFIG = server_args.deepep_config or ""
     IS_TBO_ENABLED = server_args.enable_two_batch_overlap
-    IS_SBO_ENABLED = server_args.enable_single_batch_overlap
     TBO_TOKEN_DISTRIBUTION_THRESHOLD = server_args.tbo_token_distribution_threshold
     DISABLE_FLASHINFER_CUTLASS_MOE_FP4_ALLGATHER = (
         server_args.disable_flashinfer_cutlass_moe_fp4_allgather
@@ -151,9 +144,7 @@ def get_moe_a2a_backend() -> MoeA2ABackend:
 def get_moe_runner_backend() -> MoeRunnerBackend:
     global MOE_RUNNER_BACKEND
     if MOE_RUNNER_BACKEND is None:
-        logger.warning(
-            "MOE_RUNNER_BACKEND is not initialized, the backend will be automatically selected"
-        )
+        logger.warning("MOE_RUNNER_BACKEND is not initialized, using triton backend")
         MOE_RUNNER_BACKEND = MoeRunnerBackend.AUTO
     return MOE_RUNNER_BACKEND
 
@@ -179,13 +170,6 @@ def is_tbo_enabled() -> bool:
     if IS_TBO_ENABLED is None:
         IS_TBO_ENABLED = False
     return IS_TBO_ENABLED
-
-
-def is_sbo_enabled() -> bool:
-    global IS_SBO_ENABLED
-    if IS_SBO_ENABLED is None:
-        IS_SBO_ENABLED = False
-    return IS_SBO_ENABLED
 
 
 def get_tbo_token_distribution_threshold() -> float:

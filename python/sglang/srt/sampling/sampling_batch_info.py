@@ -44,9 +44,12 @@ class SamplingBatchInfo:
     vocab_mask: Optional[torch.Tensor] = None
     apply_mask_func: Optional[Callable[[torch.Tensor, torch.Tensor], None]] = None
 
+    # An event used for overlap schedule
+    sampling_info_done: Optional[threading.Event] = None
+
     # Penalizer
     penalizer_orchestrator: Optional[penaltylib.BatchedPenalizerOrchestrator] = None
-    acc_linear_penalties: torch.Tensor = None  # Used in the overlap mode
+    linear_penalty: torch.Tensor = None
 
     # Whether any request has custom logit processor
     has_custom_logit_processor: bool = False
@@ -214,19 +217,19 @@ class SamplingBatchInfo:
 
     def update_penalties(self):
         if self.penalizer_orchestrator.is_required:
-            self.acc_linear_penalties = torch.zeros(
+            self.linear_penalty = torch.zeros(
                 (len(self.temperatures), self.vocab_size),
                 dtype=torch.float32,
                 device=self.temperatures.device,
             )
-            self.penalizer_orchestrator.apply(self.acc_linear_penalties)
+            self.penalizer_orchestrator.apply(self.linear_penalty)
         else:
-            self.acc_linear_penalties = None
+            self.linear_penalty = None
 
     def apply_logits_bias(self, logits: torch.Tensor):
-        if self.acc_linear_penalties is not None:
+        if self.linear_penalty is not None:
             # Used in the overlap mode
-            logits.add_(self.acc_linear_penalties)
+            logits.add_(self.linear_penalty)
 
         if self.penalizer_orchestrator and self.penalizer_orchestrator.is_required:
             # Used in the non-overlap mode
@@ -366,11 +369,6 @@ class SamplingBatchInfo:
         self.need_top_p_sampling |= other.need_top_p_sampling
         self.need_top_k_sampling |= other.need_top_k_sampling
         self.need_min_p_sampling |= other.need_min_p_sampling
-
-    def copy_for_forward(self):
-        # Accumulate the penalty into a pre-allocated buffer to get rid of the dependency of `penalizer_orchestrator` later
-        self.update_penalties()
-        return dataclasses.replace(self, penalizer_orchestrator=None)
 
 
 def merge_bias_tensor(

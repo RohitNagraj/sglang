@@ -186,6 +186,12 @@ impl PDRouter {
         prefill_worker: &dyn Worker,
         batch_size: Option<usize>,
     ) -> Result<Value, String> {
+        let bootstrap_port = match prefill_worker.worker_type() {
+            crate::core::WorkerType::Prefill { bootstrap_port } => bootstrap_port,
+            _ => None,
+        };
+        let hostname = super::pd_types::get_hostname(prefill_worker.url());
+
         let obj = original
             .as_object_mut()
             .ok_or_else(|| "Request must be a JSON object".to_string())?;
@@ -195,8 +201,8 @@ impl PDRouter {
             let mut ports = Vec::with_capacity(n);
             let mut rooms = Vec::with_capacity(n);
             for _ in 0..n {
-                hosts.push(prefill_worker.bootstrap_host());
-                ports.push(prefill_worker.bootstrap_port());
+                hosts.push(hostname.clone());
+                ports.push(bootstrap_port);
                 rooms.push(super::pd_types::generate_room_id());
             }
             obj.insert(
@@ -222,11 +228,11 @@ impl PDRouter {
         } else {
             obj.insert(
                 "bootstrap_host".to_string(),
-                serde_json::Value::from(prefill_worker.bootstrap_host()),
+                serde_json::Value::from(hostname),
             );
             obj.insert(
                 "bootstrap_port".to_string(),
-                match prefill_worker.bootstrap_port() {
+                match bootstrap_port {
                     Some(v) => serde_json::Value::from(v),
                     None => Value::Null,
                 },
@@ -951,6 +957,7 @@ impl RouterTrait for PDRouter {
     }
 
     async fn health_generate(&self, _req: Request<Body>) -> Response {
+        // Test model generation capability by selecting a random pair and testing them
         // Note: This endpoint actually causes the model to generate tokens, so we only test one pair
 
         // Select a random worker pair using the policy
@@ -965,6 +972,7 @@ impl RouterTrait for PDRouter {
             }
         };
 
+        // Test prefill server's health_generate
         let prefill_url = format!("{}/health_generate", prefill.url());
         let (prefill_result, decode_result) = tokio::join!(
             self.client.get(&prefill_url).send(),

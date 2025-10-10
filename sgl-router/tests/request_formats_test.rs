@@ -126,6 +126,7 @@ mod request_format_tests {
         }])
         .await;
 
+        // Test 1: Basic text request
         let payload = json!({
             "text": "Hello, world!",
             "stream": false
@@ -134,6 +135,7 @@ mod request_format_tests {
         let result = ctx.make_request("/generate", payload).await;
         assert!(result.is_ok());
 
+        // Test 2: Request with sampling parameters
         let payload = json!({
             "text": "Tell me a story",
             "sampling_params": {
@@ -147,6 +149,7 @@ mod request_format_tests {
         let result = ctx.make_request("/generate", payload).await;
         assert!(result.is_ok());
 
+        // Test 3: Request with input_ids
         let payload = json!({
             "input_ids": [1, 2, 3, 4, 5],
             "sampling_params": {
@@ -173,6 +176,7 @@ mod request_format_tests {
         }])
         .await;
 
+        // Test 1: Basic chat completion
         let payload = json!({
             "model": "test-model",
             "messages": [
@@ -193,6 +197,7 @@ mod request_format_tests {
             Some("chat.completion")
         );
 
+        // Test 2: Chat completion with parameters
         let payload = json!({
             "model": "test-model",
             "messages": [
@@ -221,6 +226,7 @@ mod request_format_tests {
         }])
         .await;
 
+        // Test 1: Basic completion
         let payload = json!({
             "model": "test-model",
             "prompt": "Once upon a time",
@@ -238,6 +244,7 @@ mod request_format_tests {
             Some("text_completion")
         );
 
+        // Test 2: Completion with array prompt
         let payload = json!({
             "model": "test-model",
             "prompt": ["First prompt", "Second prompt"],
@@ -248,6 +255,7 @@ mod request_format_tests {
         let result = ctx.make_request("/v1/completions", payload).await;
         assert!(result.is_ok());
 
+        // Test 3: Completion with logprobs
         let payload = json!({
             "model": "test-model",
             "prompt": "The capital of France is",
@@ -273,6 +281,7 @@ mod request_format_tests {
         }])
         .await;
 
+        // Test batch text generation
         let payload = json!({
             "text": ["First text", "Second text", "Third text"],
             "sampling_params": {
@@ -285,6 +294,7 @@ mod request_format_tests {
         let result = ctx.make_request("/generate", payload).await;
         assert!(result.is_ok());
 
+        // Test batch with input_ids
         let payload = json!({
             "input_ids": [[1, 2, 3], [4, 5, 6], [7, 8, 9]],
             "stream": false
@@ -307,6 +317,7 @@ mod request_format_tests {
         }])
         .await;
 
+        // Test with return_logprob
         let payload = json!({
             "text": "Test",
             "return_logprob": true,
@@ -316,6 +327,7 @@ mod request_format_tests {
         let result = ctx.make_request("/generate", payload).await;
         assert!(result.is_ok());
 
+        // Test with json_schema
         let payload = json!({
             "text": "Generate JSON",
             "sampling_params": {
@@ -328,6 +340,7 @@ mod request_format_tests {
         let result = ctx.make_request("/generate", payload).await;
         assert!(result.is_ok());
 
+        // Test with ignore_eos
         let payload = json!({
             "text": "Continue forever",
             "sampling_params": {
@@ -355,6 +368,7 @@ mod request_format_tests {
         }])
         .await;
 
+        // Test with empty body - should still work with mock worker
         let payload = json!({});
 
         let result = ctx.make_request("/generate", payload).await;

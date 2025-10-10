@@ -49,6 +49,7 @@ from sglang.srt.layers.linear import (
     RowParallelLinear,
 )
 from sglang.srt.layers.logits_processor import LogitsProcessor
+from sglang.srt.layers.moe.ep_moe.layer import EPMoE
 from sglang.srt.layers.moe.fused_moe_triton import FusedMoE
 from sglang.srt.layers.moe.router import fused_moe_router_shim
 from sglang.srt.layers.moe.topk import TopK
@@ -175,7 +176,17 @@ class Grok1MoE(nn.Module):
             custom_routing_function=custom_routing_function,
         )
 
-        self.experts = FusedMoE(
+        kwargs = {}
+        if get_moe_expert_parallel_world_size() > 1:
+            MoEImpl = EPMoE
+        else:
+            MoEImpl = FusedMoE
+            kwargs["reduce_results"] = reduce_results
+            kwargs["use_presharded_weights"] = use_presharded_weights
+            kwargs["inplace"] = inplace
+            kwargs["no_combine"] = no_combine
+
+        self.experts = MoEImpl(
             num_experts=num_experts,
             top_k=top_k,
             layer_id=layer_id,
@@ -184,10 +195,7 @@ class Grok1MoE(nn.Module):
             params_dtype=params_dtype,
             quant_config=quant_config,
             activation="gelu",
-            reduce_results=reduce_results,
-            use_presharded_weights=use_presharded_weights,
-            inplace=inplace,
-            no_combine=no_combine,
+            **kwargs,
         )
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:

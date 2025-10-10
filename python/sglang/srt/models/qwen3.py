@@ -1,5 +1,6 @@
 # Adapted from qwen2.py
 import logging
+from functools import partial
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import torch

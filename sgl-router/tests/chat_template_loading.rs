@@ -57,6 +57,7 @@ mod tests {
         )
         .unwrap();
 
+        // Test that the custom template is used
         let messages = vec![
             spec::ChatMessage::User {
                 role: "user".to_string(),
@@ -68,6 +69,7 @@ mod tests {
                 content: Some("Hi there".to_string()),
                 name: None,
                 tool_calls: None,
+                function_call: None,
                 reasoning_content: None,
             },
         ];
@@ -87,6 +89,7 @@ mod tests {
             .apply_chat_template(&json_messages, params)
             .unwrap();
 
+        // Verify the custom template format
         assert!(result.contains("<|user|>Hello"));
         assert!(result.contains("<|assistant|>Hi there"));
         assert!(result.ends_with("<|assistant|>"));
@@ -212,6 +215,7 @@ mod tests {
                 content: Some("World".to_string()),
                 name: None,
                 tool_calls: None,
+                function_call: None,
                 reasoning_content: None,
             },
         ];

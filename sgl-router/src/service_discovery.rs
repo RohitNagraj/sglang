@@ -539,13 +539,10 @@ mod tests {
             )),
             tokenizer: None,
             reasoning_parser_factory: None,
-            tool_parser_factory: None,
+            tool_parser_registry: None,
             router_manager: None,
             response_storage: Arc::new(crate::data_connector::MemoryResponseStorage::new()),
-            conversation_storage: Arc::new(crate::data_connector::MemoryConversationStorage::new()),
             load_monitor: None,
-            configured_reasoning_parser: None,
-            configured_tool_parser: None,
         })
     }
 
@@ -1021,6 +1018,7 @@ mod tests {
         };
         let port = 8080u16;
 
+        // Test that unified handler works for regular mode
         handle_pod_event(
             &pod_info,
             Arc::clone(&tracked_pods),
@@ -1047,6 +1045,7 @@ mod tests {
         };
         let port = 8080u16;
 
+        // Test that unified handler works for PD mode with prefill
         handle_pod_event(
             &pod_info,
             Arc::clone(&tracked_pods),
@@ -1081,6 +1080,7 @@ mod tests {
 
         let port = 8080u16;
 
+        // Test that unified handler works for deletion in PD mode
         handle_pod_deletion(
             &pod_info,
             Arc::clone(&tracked_pods),

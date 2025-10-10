@@ -3,6 +3,7 @@ import os
 import time
 import unittest
 from types import SimpleNamespace
+from urllib.parse import urlparse
 
 import requests
 
@@ -13,6 +14,7 @@ from sglang.test.test_utils import (
     DEFAULT_EAGLE_TARGET_MODEL_FOR_TEST,
     DEFAULT_MODEL_NAME_FOR_TEST,
     DEFAULT_TIMEOUT_FOR_SERVER_LAUNCH,
+    DEFAULT_URL_FOR_TEST,
     popen_launch_pd_server,
 )
 
@@ -20,8 +22,17 @@ from sglang.test.test_utils import (
 class TestDisaggregationAccuracy(TestDisaggregationBase):
     @classmethod
     def setUpClass(cls):
-        super().setUpClass()
         cls.model = DEFAULT_MODEL_NAME_FOR_TEST
+        parsed_url = urlparse(DEFAULT_URL_FOR_TEST)
+        cls.base_host = parsed_url.hostname
+        base_port = str(parsed_url.port)
+        cls.lb_port = base_port
+        cls.prefill_port = f"{int(base_port) + 100}"
+        cls.decode_port = f"{int(base_port) + 200}"
+        cls.prefill_url = f"http://{cls.base_host}:{cls.prefill_port}"
+        cls.decode_url = f"http://{cls.base_host}:{cls.decode_port}"
+        cls.lb_url = f"http://{cls.base_host}:{cls.lb_port}"
+        print(f"{cls.base_host=} {cls.lb_port=} {cls.prefill_port=} {cls.decode_port=}")
 
         # Non blocking start servers
         cls.start_prefill()
@@ -41,8 +52,9 @@ class TestDisaggregationAccuracy(TestDisaggregationBase):
             "prefill",
             "--tp",
             "1",
+            "--disaggregation-ib-device",
+            "mlx5_roce0",
         ]
-        prefill_args += cls.transfer_backend + cls.rdma_devices
         cls.process_prefill = popen_launch_pd_server(
             cls.model,
             cls.prefill_url,
@@ -60,8 +72,9 @@ class TestDisaggregationAccuracy(TestDisaggregationBase):
             "1",
             "--base-gpu-id",
             "1",
+            "--disaggregation-ib-device",
+            "mlx5_roce1",
         ]
-        decode_args += cls.transfer_backend + cls.rdma_devices
         cls.process_decode = popen_launch_pd_server(
             cls.model,
             cls.decode_url,
@@ -141,11 +154,20 @@ class TestDisaggregationAccuracy(TestDisaggregationBase):
 class TestDisaggregationMooncakeFailure(TestDisaggregationBase):
     @classmethod
     def setUpClass(cls):
-        super().setUpClass()
         # set DISAGGREGATION_TEST_FAILURE_PROB to simulate failure
         os.environ["DISAGGREGATION_TEST_FAILURE_PROB"] = "0.05"
 
         cls.model = DEFAULT_MODEL_NAME_FOR_TEST
+        parsed_url = urlparse(DEFAULT_URL_FOR_TEST)
+        cls.base_host = parsed_url.hostname
+        base_port = str(parsed_url.port)
+        cls.lb_port = base_port
+        cls.prefill_port = f"{int(base_port) + 100}"
+        cls.decode_port = f"{int(base_port) + 200}"
+        cls.prefill_url = f"http://{cls.base_host}:{cls.prefill_port}"
+        cls.decode_url = f"http://{cls.base_host}:{cls.decode_port}"
+        cls.lb_url = f"http://{cls.base_host}:{cls.lb_port}"
+        print(f"{cls.base_host=} {cls.lb_port=} {cls.prefill_port=} {cls.decode_port=}")
 
         # Non blocking start servers
         cls.start_prefill()
@@ -170,8 +192,9 @@ class TestDisaggregationMooncakeFailure(TestDisaggregationBase):
             "prefill",
             "--tp",
             "1",
+            "--disaggregation-ib-device",
+            "mlx5_roce0",
         ]
-        prefill_args += cls.transfer_backend + cls.rdma_devices
         cls.process_prefill = popen_launch_pd_server(
             cls.model,
             cls.prefill_url,
@@ -189,8 +212,9 @@ class TestDisaggregationMooncakeFailure(TestDisaggregationBase):
             "1",
             "--base-gpu-id",
             "1",
+            "--disaggregation-ib-device",
+            "mlx5_roce1",
         ]
-        decode_args += cls.transfer_backend + cls.rdma_devices
         cls.process_decode = popen_launch_pd_server(
             cls.model,
             cls.decode_url,
@@ -230,9 +254,17 @@ class TestDisaggregationMooncakeSpec(TestDisaggregationBase):
 
     @classmethod
     def setUpClass(cls):
-        super().setUpClass()
         cls.model = DEFAULT_EAGLE_TARGET_MODEL_FOR_TEST
         cls.draft_model = DEFAULT_EAGLE_DRAFT_MODEL_FOR_TEST
+        parsed_url = urlparse(DEFAULT_URL_FOR_TEST)
+        cls.base_host = parsed_url.hostname
+        base_port = str(parsed_url.port)
+        cls.lb_port = base_port
+        cls.prefill_port = f"{int(base_port) + 100}"
+        cls.decode_port = f"{int(base_port) + 200}"
+        cls.prefill_url = f"http://{cls.base_host}:{cls.prefill_port}"
+        cls.decode_url = f"http://{cls.base_host}:{cls.decode_port}"
+        cls.lb_url = f"http://{cls.base_host}:{cls.lb_port}"
         cls.spec_args = [
             "--speculative-algorithm",
             "EAGLE",
@@ -266,9 +298,10 @@ class TestDisaggregationMooncakeSpec(TestDisaggregationBase):
             "--disaggregation-mode",
             "prefill",
             "--tp",
-            "1",
+            "2",
+            "--disaggregation-ib-device",
+            "mlx5_roce0,mlx5_roce1",
         ] + cls.spec_args
-        prefill_args += cls.transfer_backend + cls.rdma_devices
         cls.process_prefill = popen_launch_pd_server(
             cls.model,
             cls.prefill_url,
@@ -283,11 +316,12 @@ class TestDisaggregationMooncakeSpec(TestDisaggregationBase):
             "--disaggregation-mode",
             "decode",
             "--tp",
-            "1",
+            "2",
             "--base-gpu-id",
-            "1",
+            "2",
+            "--disaggregation-ib-device",
+            "mlx5_roce2,mlx5_roce3",
         ] + cls.spec_args
-        decode_args += cls.transfer_backend + cls.rdma_devices
         cls.process_decode = popen_launch_pd_server(
             cls.model,
             cls.decode_url,
@@ -314,9 +348,18 @@ class TestDisaggregationMooncakeSpec(TestDisaggregationBase):
 class TestDisaggregationSimulatedRetract(TestDisaggregationBase):
     @classmethod
     def setUpClass(cls):
-        super().setUpClass()
         os.environ["SGLANG_TEST_RETRACT"] = "true"
         cls.model = DEFAULT_MODEL_NAME_FOR_TEST
+        parsed_url = urlparse(DEFAULT_URL_FOR_TEST)
+        cls.base_host = parsed_url.hostname
+        base_port = str(parsed_url.port)
+        cls.lb_port = base_port
+        cls.prefill_port = f"{int(base_port) + 100}"
+        cls.decode_port = f"{int(base_port) + 200}"
+        cls.prefill_url = f"http://{cls.base_host}:{cls.prefill_port}"
+        cls.decode_url = f"http://{cls.base_host}:{cls.decode_port}"
+        cls.lb_url = f"http://{cls.base_host}:{cls.lb_port}"
+        print(f"{cls.base_host=} {cls.lb_port=} {cls.prefill_port=} {cls.decode_port=}")
 
         # Non blocking start servers
         cls.start_prefill()
@@ -341,8 +384,9 @@ class TestDisaggregationSimulatedRetract(TestDisaggregationBase):
             "prefill",
             "--tp",
             "1",
+            "--disaggregation-ib-device",
+            "mlx5_roce0",
         ]
-        prefill_args += cls.transfer_backend + cls.rdma_devices
         cls.process_prefill = popen_launch_pd_server(
             cls.model,
             cls.prefill_url,
@@ -360,8 +404,9 @@ class TestDisaggregationSimulatedRetract(TestDisaggregationBase):
             "1",
             "--base-gpu-id",
             "1",
+            "--disaggregation-ib-device",
+            "mlx5_roce1",
         ]
-        decode_args += cls.transfer_backend + cls.rdma_devices
         cls.process_decode = popen_launch_pd_server(
             cls.model,
             cls.decode_url,

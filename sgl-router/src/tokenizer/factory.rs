@@ -134,36 +134,6 @@ fn is_likely_sentencepiece(buffer: &[u8]) -> bool {
             || buffer.windows(4).any(|w| w == b"</s>"))
 }
 
-/// Helper function to discover chat template files in a directory
-pub fn discover_chat_template_in_dir(dir: &Path) -> Option<String> {
-    use std::fs;
-
-    // Priority 1: Look for chat_template.json (contains Jinja in JSON format)
-    let json_template_path = dir.join("chat_template.json");
-    if json_template_path.exists() {
-        return json_template_path.to_str().map(|s| s.to_string());
-    }
-
-    // Priority 2: Look for chat_template.jinja (standard Jinja file)
-    let jinja_path = dir.join("chat_template.jinja");
-    if jinja_path.exists() {
-        return jinja_path.to_str().map(|s| s.to_string());
-    }
-
-    // Priority 3: Look for any .jinja file (for models with non-standard naming)
-    if let Ok(entries) = fs::read_dir(dir) {
-        for entry in entries.flatten() {
-            if let Some(name) = entry.file_name().to_str() {
-                if name.ends_with(".jinja") && name != "chat_template.jinja" {
-                    return entry.path().to_str().map(|s| s.to_string());
-                }
-            }
-        }
-    }
-
-    None
-}
-
 /// Factory function to create tokenizer from a model name or path (async version)
 pub async fn create_tokenizer_async(
     model_name_or_path: &str,
@@ -191,32 +161,14 @@ pub async fn create_tokenizer_async(
             // Look for tokenizer.json in the cache directory
             let tokenizer_path = cache_dir.join("tokenizer.json");
             if tokenizer_path.exists() {
-                // Try to find a chat template file in the cache directory
-                let chat_template_path = discover_chat_template_in_dir(&cache_dir);
-                let tokenizer_path_str = tokenizer_path.to_str().ok_or_else(|| {
-                    Error::msg(format!(
-                        "Tokenizer path is not valid UTF-8: {:?}",
-                        tokenizer_path
-                    ))
-                })?;
-                create_tokenizer_with_chat_template(
-                    tokenizer_path_str,
-                    chat_template_path.as_deref(),
-                )
+                create_tokenizer_from_file(tokenizer_path.to_str().unwrap())
             } else {
                 // Try other common tokenizer file names
                 let possible_files = ["tokenizer_config.json", "vocab.json"];
                 for file_name in &possible_files {
                     let file_path = cache_dir.join(file_name);
                     if file_path.exists() {
-                        let chat_template_path = discover_chat_template_in_dir(&cache_dir);
-                        let file_path_str = file_path.to_str().ok_or_else(|| {
-                            Error::msg(format!("File path is not valid UTF-8: {:?}", file_path))
-                        })?;
-                        return create_tokenizer_with_chat_template(
-                            file_path_str,
-                            chat_template_path.as_deref(),
-                        );
+                        return create_tokenizer_from_file(file_path.to_str().unwrap());
                     }
                 }
                 Err(Error::msg(format!(
@@ -327,9 +279,11 @@ mod tests {
 
     #[test]
     fn test_create_tiktoken_tokenizer() {
+        // Test creating tokenizer for GPT models
         let tokenizer = create_tokenizer("gpt-4").unwrap();
         assert!(tokenizer.vocab_size() > 0);
 
+        // Test encoding and decoding
         let text = "Hello, world!";
         let encoding = tokenizer.encode(text).unwrap();
         let decoded = tokenizer.decode(encoding.token_ids(), false).unwrap();
@@ -338,6 +292,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_download_tokenizer_from_hf() {
+        // Test with a small model that should have tokenizer files
         // Skip this test if HF_TOKEN is not set and we're in CI
         if std::env::var("CI").is_ok() && std::env::var("HF_TOKEN").is_err() {
             println!("Skipping HF download test in CI without HF_TOKEN");

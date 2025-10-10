@@ -9,14 +9,11 @@ use serde_json;
 use std::fmt;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, LazyLock};
-use std::time::Duration;
-use std::time::Instant;
 use tokio::sync::{Mutex, RwLock};
-use tokio::time;
 
 static WORKER_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
     reqwest::Client::builder()
-        .timeout(Duration::from_secs(30))
+        .timeout(std::time::Duration::from_secs(30))
         .build()
         .expect("Failed to create worker HTTP client")
 });
@@ -33,18 +30,6 @@ pub trait Worker: Send + Sync + fmt::Debug {
 
     /// Get the worker's connection mode (HTTP or gRPC)
     fn connection_mode(&self) -> ConnectionMode;
-
-    /// Get the bootstrap hostname for PD mode
-    /// Returns cached hostname parsed from URL at construction time
-    fn bootstrap_host(&self) -> &str {
-        &self.metadata().bootstrap_host
-    }
-
-    /// Get the bootstrap port for PD mode
-    /// Returns cached port from WorkerType::Prefill
-    fn bootstrap_port(&self) -> Option<u16> {
-        self.metadata().bootstrap_port
-    }
 
     /// Check if the worker is currently healthy
     fn is_healthy(&self) -> bool;
@@ -162,6 +147,21 @@ pub trait Worker: Send + Sync + fmt::Debug {
         true
     }
 
+    // TODO: - Enhanced Worker Discovery
+    // The Worker trait should handle async discovery of metadata from the worker itself
+    // rather than having service discovery or other components query /get_server_info.
+    // This keeps service discovery decoupled from worker-specific APIs.
+    //
+    // Proposed additions:
+    // - async fn discover_metadata(&mut self) -> Result<(), Error>
+    //   Query /get_server_info and populate metadata labels with model_id, priority, cost, etc.
+    // - async fn validate_configuration(&self) -> Result<(), Error>
+    //   Ensure worker has required configuration for its mode (e.g., tokenizer for gRPC)
+    // - Make worker creation async to allow metadata discovery during initialization
+    //
+    // This way service discovery just calls router.add_worker() and the worker
+    // handles its own metadata discovery internally.
+
     /// Get the model ID this worker serves
     fn model_id(&self) -> &str {
         self.metadata()
@@ -230,8 +230,6 @@ pub trait Worker: Send + Sync + fmt::Debug {
     async fn reset_grpc_client(&self) -> WorkerResult<()> {
         Ok(())
     }
-    async fn grpc_health_check(&self) -> WorkerResult<bool>;
-    async fn http_health_check(&self) -> WorkerResult<bool>;
 }
 
 /// Connection mode for worker communication
@@ -327,10 +325,6 @@ pub struct WorkerMetadata {
     pub health_config: HealthConfig,
     /// API key
     pub api_key: Option<String>,
-    /// Cached bootstrap hostname (parsed from URL at construction time)
-    pub bootstrap_host: String,
-    /// Cached bootstrap port (from WorkerType::Prefill)
-    pub bootstrap_port: Option<u16>,
 }
 
 /// Basic worker implementation
@@ -361,22 +355,17 @@ impl fmt::Debug for BasicWorker {
 impl BasicWorker {
     pub fn normalised_url(&self) -> WorkerResult<&str> {
         if self.url().contains("@") {
-            // Use rfind to split from the right, handling IPv6 addresses with brackets
-            // e.g., "http://[::1]:8080@0" -> "http://[::1]:8080" and "0"
-            if let Some(at_pos) = self.url().rfind('@') {
-                let base_url = &self.url()[..at_pos];
-                let rank_str = &self.url()[at_pos + 1..];
-
-                // Validate that the rank part is actually a number
-                match rank_str.parse::<usize>() {
-                    Ok(_) => Ok(base_url),
-                    Err(_) => {
-                        // The '@' is not a DP rank separator, return full URL
-                        Ok(self.url())
-                    }
-                }
-            } else {
-                Ok(self.url())
+            let parts: Vec<&str> = self.url().split('@').collect();
+            if parts.len() != 2 {
+                return Err(WorkerError::InvalidUrl {
+                    url: self.url().to_string(),
+                });
+            }
+            match parts[1].parse::<usize>() {
+                Ok(_) => Ok(parts[0]),
+                Err(_) => Err(WorkerError::InvalidUrl {
+                    url: self.url().to_string(),
+                }),
             }
         } else {
             Ok(self.url())
@@ -412,9 +401,66 @@ impl Worker for BasicWorker {
     }
 
     async fn check_health_async(&self) -> WorkerResult<()> {
+        use std::time::Duration;
+
         let health_result = match &self.metadata.connection_mode {
-            ConnectionMode::Http => self.http_health_check().await?,
-            ConnectionMode::Grpc { .. } => self.grpc_health_check().await?,
+            ConnectionMode::Http => {
+                let url = self.normalised_url()?;
+                let health_url = format!("{}{}", url, self.metadata.health_config.endpoint);
+                let timeout = Duration::from_secs(self.metadata.health_config.timeout_secs);
+
+                let mut request = WORKER_CLIENT.get(&health_url).timeout(timeout);
+
+                if let Some(ref api_key) = self.metadata.api_key {
+                    request = request.header("Authorization", format!("Bearer {}", api_key));
+                }
+
+                match request.send().await {
+                    Ok(response) => response.status().is_success(),
+                    Err(_) => false,
+                }
+            }
+            ConnectionMode::Grpc { .. } => {
+                // Use the new get_grpc_client() method for lazy initialization
+                match self.get_grpc_client().await {
+                    Ok(Some(grpc_client)) => {
+                        let mut client = grpc_client.lock().await;
+                        match client.health_check().await {
+                            Ok(response) => {
+                                tracing::debug!(
+                                    "gRPC health check succeeded for {}: healthy={}",
+                                    self.metadata.url,
+                                    response.healthy
+                                );
+                                response.healthy
+                            }
+                            Err(e) => {
+                                tracing::warn!(
+                                    "gRPC health check RPC failed for {}: {:?}",
+                                    self.metadata.url,
+                                    e
+                                );
+                                false
+                            }
+                        }
+                    }
+                    Ok(None) => {
+                        tracing::error!(
+                            "Worker {} is not a gRPC worker but has gRPC connection mode",
+                            self.metadata.url
+                        );
+                        false
+                    }
+                    Err(e) => {
+                        tracing::error!(
+                            "Failed to get gRPC client for worker {}: {:?}",
+                            self.metadata.url,
+                            e
+                        );
+                        false
+                    }
+                }
+            }
         };
 
         if health_result {
@@ -539,61 +585,6 @@ impl Worker for BasicWorker {
                     *client_guard = None;
                 }
                 Ok(())
-            }
-        }
-    }
-
-    async fn grpc_health_check(&self) -> WorkerResult<bool> {
-        let timeout = Duration::from_secs(self.metadata.health_config.timeout_secs);
-        let maybe = self.get_grpc_client().await?;
-        let Some(grpc_client) = maybe else {
-            tracing::error!(
-                "Worker {} is not a gRPC worker but connection mode is gRPC",
-                self.metadata.url
-            );
-            return Ok(false);
-        };
-
-        let mut client = grpc_client.lock().await;
-        match time::timeout(timeout, client.health_check()).await {
-            Ok(Ok(resp)) => {
-                tracing::debug!(
-                    "gRPC health OK for {}: healthy={}",
-                    self.metadata.url,
-                    resp.healthy
-                );
-                Ok(resp.healthy)
-            }
-            Ok(Err(err)) => {
-                tracing::warn!("gRPC health RPC error for {}: {err:?}", self.metadata.url);
-                Ok(false)
-            }
-            Err(_) => {
-                tracing::warn!("gRPC health timed out for {}", self.metadata.url);
-                Ok(false)
-            }
-        }
-    }
-
-    async fn http_health_check(&self) -> WorkerResult<bool> {
-        let timeout = Duration::from_secs(self.metadata.health_config.timeout_secs);
-
-        let url = self.normalised_url()?;
-        let health_url = format!("{}{}", url, self.metadata.health_config.endpoint);
-
-        let mut req = WORKER_CLIENT.get(health_url).timeout(timeout);
-        if let Some(api_key) = &self.metadata.api_key {
-            req = req.bearer_auth(api_key);
-        }
-
-        match req.send().await {
-            Ok(resp) => Ok(resp.status().is_success()),
-            Err(err) => {
-                tracing::warn!(
-                    "HTTP health check failed for {}: {err:?}",
-                    self.metadata.url
-                );
-                Ok(false)
             }
         }
     }
@@ -733,14 +724,6 @@ impl Worker for DPAwareWorker {
     async fn reset_grpc_client(&self) -> WorkerResult<()> {
         self.base_worker.reset_grpc_client().await
     }
-
-    async fn grpc_health_check(&self) -> WorkerResult<bool> {
-        self.base_worker.grpc_health_check().await
-    }
-
-    async fn http_health_check(&self) -> WorkerResult<bool> {
-        self.base_worker.http_health_check().await
-    }
 }
 
 /// Worker factory for creating workers of different types
@@ -766,8 +749,10 @@ impl WorkerFactory {
     /// Static health validation before creating a worker
     /// This replaces wait_for_worker_health in handlers
     pub async fn validate_health(url: &str, timeout_secs: u64) -> WorkerResult<()> {
+        use std::time::Instant;
+
         let start_time = Instant::now();
-        let timeout = Duration::from_secs(timeout_secs);
+        let timeout = std::time::Duration::from_secs(timeout_secs);
 
         loop {
             if start_time.elapsed() > timeout {
@@ -784,7 +769,7 @@ impl WorkerFactory {
             // API key authentication is handled in the worker instance's check_health_async method
             match WORKER_CLIENT
                 .get(format!("{}/health", url))
-                .timeout(Duration::from_secs(5))
+                .timeout(std::time::Duration::from_secs(5))
                 .send()
                 .await
             {
@@ -804,7 +789,7 @@ impl WorkerFactory {
                 }
             }
 
-            tokio::time::sleep(Duration::from_secs(1)).await;
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         }
     }
 }
@@ -900,7 +885,8 @@ pub fn start_health_checker(
     let shutdown_clone = shutdown.clone();
 
     let handle = tokio::spawn(async move {
-        let mut interval = tokio::time::interval(Duration::from_secs(check_interval_secs));
+        let mut interval =
+            tokio::time::interval(tokio::time::Duration::from_secs(check_interval_secs));
 
         // Counter for periodic load reset (every 10 health check cycles)
         let mut check_count = 0u64;
@@ -1576,16 +1562,19 @@ mod tests {
             .worker_type(WorkerType::Regular)
             .build();
 
+        // Test health status
         assert!(dp_worker.is_healthy());
         dp_worker.set_healthy(false);
         assert!(!dp_worker.is_healthy());
 
+        // Test load tracking
         assert_eq!(dp_worker.load(), 0);
         dp_worker.increment_load();
         assert_eq!(dp_worker.load(), 1);
         dp_worker.decrement_load();
         assert_eq!(dp_worker.load(), 0);
 
+        // Test processed tracking
         assert_eq!(dp_worker.processed_requests(), 0);
         dp_worker.increment_processed();
         assert_eq!(dp_worker.processed_requests(), 1);

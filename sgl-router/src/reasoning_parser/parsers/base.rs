@@ -187,10 +187,6 @@ impl ReasoningParser for BaseReasoningParser {
     fn model_type(&self) -> &str {
         &self.model_type
     }
-
-    fn is_in_reasoning(&self) -> bool {
-        self.in_reasoning
-    }
 }
 
 #[cfg(test)]

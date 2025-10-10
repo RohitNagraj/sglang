@@ -126,11 +126,6 @@ class Envs:
     SGLANG_DISABLE_REQUEST_LOGGING = EnvBool(False)
     SGLANG_SIMULATE_ACC_LEN = EnvFloat(-1)
     SGLANG_SIMULATE_ACC_METHOD = EnvStr("multinomial")
-    SGLANG_TORCH_PROFILER_DIR = EnvStr("/tmp")
-
-    # Test: pd-disaggregation
-    SGLANG_TEST_PD_DISAGG_BACKEND = EnvStr("mooncake")
-    SGLANG_TEST_PD_DISAGG_DEVICES = EnvStr(None)
 
     # Model Parallel
     SGLANG_USE_MESSAGE_QUEUE_BROADCASTER = EnvBool(True)
