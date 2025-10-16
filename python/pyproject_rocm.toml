@@ -3,7 +3,7 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "sglang-rocm"
+name = "sglangrpujarna"
 version = "0.5.3.post2"
 description = "SGLang is a fast serving framework for large language models and vision language models."
 readme = "README.md"
@@ -86,9 +86,9 @@ tracing = [
   "opentelemetry-sdk",
 ]
 630 = [
-    "torch @ https://download.pytorch.org/whl/rocm6.4/torch-2.9.0%2Brocm6.4-cp310-cp310-manylinux_2_28_x86_64.whl",
-    "torchvision @ https://download.pytorch.org/whl/rocm6.4/torchvision-0.24.0%2Brocm6.4-cp310-cp310-manylinux_2_28_x86_64.whl",
-    "sgl-kernel-rocm630-torch290 @ https://test-files.pythonhosted.org/packages/0c/1f/bf01cb0926577d4590116b4e560c7e6cbe577c68eea2e5a34a2bf6c095a7/sgl_kernel_rocm630_torch290-0.3.15-cp310-abi3-manylinux2014_x86_64.whl",
+    "torch==2.9.0",
+    "torchvision==0.24.0+rocm6.4",
+    "sgl-kernel-rocm630-torch290"
 ]
 630_all = [
   "sglang[test]",
@@ -97,9 +97,9 @@ tracing = [
 ]
 
 700 = [
-    "torch @ https://download.pytorch.org/whl/nightly/rocm7.0/torch-2.10.0.dev20251009%2Brocm7.0-cp310-cp310-manylinux_2_28_x86_64.whl",
-    "torchvision @ https://download.pytorch.org/whl/nightly/rocm7.0/torchvision-0.25.0.dev20251010%2Brocm7.0-cp310-cp310-manylinux_2_28_x86_64.whl",
-    "sgl-kernel-rocm700-torch210 @ https://test-files.pythonhosted.org/packages/a4/95/1e298495207c7bce319f0f056a9b26b6fde8c888807f453f16fa843cf9f8/sgl_kernel_rocm700_torch210-0.3.15-cp310-abi3-manylinux2014_x86_64.whl",
+    "torch==2.10.0.dev20251009+rocm7.0",
+    "torchvision==0.25.0.dev20251010+rocm7.0",
+    "sgl-kernel-rocm700-torch210"
 ]
 700_all = [
   "sglang[test]",
@@ -145,3 +145,10 @@ exclude = [
 [tool.codespell]
 ignore-words-list = "ans, als, hel, boostrap, childs, te, vas, hsa, ment"
 skip = "*.json,*.jsonl,*.patch,*.txt"
+
+[tool.uv]
+extra-index-url = [
+  "https://download.pytorch.org/whl/rocm6.4",
+  "https://download.pytorch.org/whl/nightly/rocm7.0",
+  "https://test.pypi.org/simple/"
+  ]
