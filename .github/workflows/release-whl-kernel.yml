@@ -40,11 +40,6 @@ jobs:
           chmod +x ./build_rocm.sh
           ./build_rocm.sh "${{ matrix.rocm-version }}"
 
-      - name: Fix permissions  # Add this step
-        if: always()
-        run: |
-          sudo chown -R $USER:$USER sgl-kernel || true
-
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -79,14 +74,14 @@ jobs:
         with:
           tag_name: ${{ steps.set_tag_name.outputs.tag_name }}
           repository: RohitNagraj/sglang-whl
-          token: ${{ secrets.WHL_TOKEN }}
+          token: ${{ secrets.GH_PAT_FOR_WHL_RELEASE }}
           files: |
             sgl-kernel/dist/*
 
       - name: Clone wheel index
         run: git clone https://oauth2:${WHL_TOKEN}@github.com/RohitNagraj/sglang-whl.git sgl-whl
         env:
-          WHL_TOKEN: ${{ secrets.WHL_TOKEN }}
+          WHL_TOKEN: ${{ secrets.GH_PAT_FOR_WHL_RELEASE }}
 
       - name: Update wheel index
         run: python3 scripts/update_kernel_whl_index.py --rocm 700
