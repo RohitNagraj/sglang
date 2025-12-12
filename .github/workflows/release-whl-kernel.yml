@@ -40,6 +40,11 @@ jobs:
           chmod +x ./build_rocm.sh
           ./build_rocm.sh "${{ matrix.rocm-version }}"
 
+      - name: Fix permissions  # Add this step
+        if: always()
+        run: |
+          sudo chown -R $USER:$USER sgl-kernel/dist || true
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
