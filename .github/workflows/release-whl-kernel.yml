@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   build-rocm700:
-    if: github.repository == 'sgl-project/sglang'
+    if: github.repository == 'RohitNagraj/sglang'
     runs-on: rpujarna-amd
     strategy:
       matrix:
