@@ -43,7 +43,7 @@ jobs:
       - name: Fix permissions  # Add this step
         if: always()
         run: |
-          sudo chown -R $USER:$USER sgl-kernel/dist || true
+          sudo chown -R $USER:$USER sgl-kernel || true
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
