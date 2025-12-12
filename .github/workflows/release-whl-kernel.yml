@@ -19,7 +19,7 @@ concurrency:
 jobs:
   build-rocm700:
     if: github.repository == 'RohitNagraj/sglang'
-    runs-on: rpujarna-amd
+    runs-on: self-hosted
     strategy:
       matrix:
         python-version: ["3.10"]
@@ -48,7 +48,7 @@ jobs:
 
   release-rocm700:
     needs: build-rocm700
-    runs-on: rpujarna-amd
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
 
